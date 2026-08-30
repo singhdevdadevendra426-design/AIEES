@@ -1,0 +1,26 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: #0b0f14;
+  color: white;
+}
+
+
+
+
+.app h1 {
+  font-size: 64px;
+  letter-spacing: 8px;
+  color: #ff4d4d;
+  margin-bottom: 15px;
+}
+
+.app p {
+  color: #9ca3af;
+  font-size: 18px;
+}
