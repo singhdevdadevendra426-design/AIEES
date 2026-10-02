@@ -349,7 +349,19 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-          const result = await searchPlace(`${latitude}, ${longitude}`);
+          let result;
+          try {
+            result = await searchPlace(`${latitude}, ${longitude}`);
+          } catch {
+            result = {
+              id: `user-location:${latitude}:${longitude}`,
+              name: "Current Location",
+              formatted_address: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+              lat: latitude,
+              lng: longitude,
+              source: "BROWSER_GEOLOCATION",
+            };
+          }
           if (!hasCoordinates(result.lat, result.lng)) throw new Error("Current location returned invalid coordinates.");
           setPlaceQuery(result.name || "Current Location");
           setPlace({ ...result, name: result.name || "Current Location", placeType: "user_location" });
