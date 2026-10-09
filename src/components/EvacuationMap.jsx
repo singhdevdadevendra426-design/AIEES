@@ -49,8 +49,18 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       body: JSON.stringify(payload),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || "AI analysis is unavailable.");
-    return result;
+    if (response.ok) return result;
+
+    return {
+      riskLevel: payload.hazards?.length ? "MEDIUM" : "LOW",
+      riskScore: payload.hazards?.length ? 55 : 25,
+      hazards: payload.hazards || [],
+      routes: payload.routes || [],
+      recommendedRoute: payload.routes?.[0] || null,
+      occupancy: payload.occupancy || { source: "UNAVAILABLE", estimatedCount: null },
+      limitations: [result.error || "AI service unavailable. Showing map-based analysis."],
+      answer: "AI service is temporarily unavailable. Map, routes, hazards, and location data remain available.",
+    };
   }
 
   useEffect(() => () => imageUrl && URL.revokeObjectURL(imageUrl), [imageUrl]);
@@ -200,7 +210,9 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       .then((result) => {
         if (!active) return;
         setAiAnalysis(result);
-        setMessage("✓ Emergency analysis complete. Ready for evacuation planning.");
+        setMessage(result.limitations?.length
+          ? "Emergency analysis complete with available map data."
+          : "✓ Emergency analysis complete. Ready for evacuation planning.");
       })
       .catch((err) => {
         if (!active) return;
