@@ -423,8 +423,29 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
   return (
     <div className="evacuation-map">
       <div className="map-header">
-        <h2>🚨 Evacuation Intelligence System</h2>
+        <div>
+          <span className="map-kicker">FIELD OPERATIONS / LIVE VIEW</span>
+          <h2>🚨 Evacuation Intelligence System</h2>
+        </div>
         <span className="status">● {place ? "ACTIVE" : "READY"}</span>
+      </div>
+
+      <div className="map-summary">
+        <div className="map-summary-item map-summary-primary">
+          <span>ACTIVE LOCATION</span>
+          <strong>{place?.name || "Awaiting search"}</strong>
+          <small>{place ? `${place.lat.toFixed(4)}, ${place.lng.toFixed(4)}` : "Search a place to begin"}</small>
+        </div>
+        <div className="map-summary-item">
+          <span>ROUTE ENGINE</span>
+          <strong>{routeInfo.length ? `${routeInfo.length} scored` : "Standby"}</strong>
+          <small>{routeInfo.length ? "Risk-ranked exits" : "Waiting for location"}</small>
+        </div>
+        <div className="map-summary-item">
+          <span>DATA STATUS</span>
+          <strong>{place ? "Connected" : "Ready"}</strong>
+          <small>OpenStreetMap intelligence</small>
+        </div>
       </div>
       
       {/* Search section */}
