@@ -486,6 +486,14 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       {/* Map display */}
       <div className="map-area">
         <div className="osm-map" ref={mapRef}></div>
+        <div className="map-overlay map-overlay-top">
+          <span className="map-live-indicator"><span /> LIVE MAP</span>
+          <span>{place ? "LOCATION LOCKED" : "AWAITING LOCATION"}</span>
+        </div>
+        <div className="map-overlay map-overlay-bottom">
+          <span>OPENSTREETMAP DATA</span>
+          <span>{routeInfo.length ? `${routeInfo.length} ROUTES SCORED` : "ROUTES PENDING"}</span>
+        </div>
         {imageUrl && <img className="map-image" src={imageUrl} alt="Uploaded" />}
         {!place && (
           <div className="map-grid">
