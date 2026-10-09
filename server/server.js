@@ -8,9 +8,9 @@ try {
   });
 } catch {}
 
-const port = 8787;
+const port = Number(process.env.PORT) || 8787;
 const model = process.env.OPENAI_MODEL || "gpt-5";
-const allowedOrigins = (process.env.APP_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173").split(",");
+const allowedOrigins = (process.env.APP_ORIGIN || "https://aies-verse.vercel.app,http://localhost:5173,http://127.0.0.1:5173").split(",");
 const sensorEvents = [];
 const hazardEvents = [];
 

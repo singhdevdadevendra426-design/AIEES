@@ -341,6 +341,11 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       return;
     }
 
+    if (!window.isSecureContext) {
+      setError("Current location needs HTTPS. Open the hosted site with its https:// URL.");
+      return;
+    }
+
     setSearching(true);
     setError("");
     setMessage("Locating you...");
@@ -374,7 +379,7 @@ function EvacuationMap({ alternateRoute, isRunning, agents = [], routes = [], ex
       },
       (geoError) => {
         const messages = {
-          1: "Location permission was denied. You can still search for a place manually.",
+          1: "Location permission was denied. Allow location access in the browser and try again.",
           2: "Current location is unavailable right now.",
           3: "Location request timed out. Please try again.",
         };

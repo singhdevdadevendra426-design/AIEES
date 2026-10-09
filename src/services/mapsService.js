@@ -14,61 +14,133 @@ export function buildFallbackExitsFromLocation(lat, lng) {
   }));
 }
 
-export async function searchPlace(query) {
-  let response;
-  try {
-    response = await fetch(`/api/location/search?q=${encodeURIComponent(query)}`);
-  } catch {
-    throw new Error("Location service unavailable.");
+function normalizeNominatimResult(result) {
+  const lat = Number(result?.lat);
+  const lng = Number(result?.lon ?? result?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
   }
-  if (!response.ok) throw new Error("Location service unavailable.");
-
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error("Location service unavailable.");
-  }
-
-  const results = payload.results;
-  if (!Array.isArray(results) || !results.length) throw new Error("Place not found.");
-
-  const result = results[0];
-  const lat = Number(result.lat);
-  const lng = Number(result.lng);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("Location service returned invalid coordinates.");
 
   return {
-    name: result.name || result.formatted_address.split(",")[0],
-    formatted_address: result.display_name,
-    place_id: result.id,
+    id: result?.osm_id || result?.place_id || `${lat}:${lng}`,
+    name: result?.name || result?.display_name?.split(",")[0] || "Location",
+    formatted_address: result?.display_name || "Unknown address",
     lat,
     lng,
-    placeType: result.type || "amenity",
-    dataConfidence: result.confidence ?? 0.9,
-    source: result.source || "NOMINATIM_MAP_DATA",
+    placeType: result?.type || result?.class || "amenity",
+    dataConfidence: result?.confidence ?? 0.9,
+    source: result?.source || "NOMINATIM_MAP_DATA",
     timestamp: new Date().toISOString(),
   };
 }
 
-export async function getNearbyFeatures(lat, lng) {
-  try {
-    const response = await fetch(`/api/map/features?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`);
-    if (!response.ok) {
-      return { buildings: [], entrances: [], exits: buildFallbackExitsFromLocation(lat, lng), safeAreas: [] };
+export async function searchPlace(query) {
+  const trimmedQuery = String(query || "").trim();
+  const searchSources = [
+    `/api/location/search?q=${encodeURIComponent(trimmedQuery)}`,
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&q=${encodeURIComponent(trimmedQuery)}`,
+  ];
+
+  let lastError = new Error("Location service unavailable.");
+
+  for (const source of searchSources) {
+    try {
+      const response = await fetch(source, source.startsWith("http") ? {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "EVACAI/1.0",
+        },
+      } : undefined);
+
+      if (!response.ok) {
+        throw new Error("Location service unavailable.");
+      }
+
+      const payload = await response.json();
+      const results = Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [];
+      const result = results[0] ? normalizeNominatimResult(results[0]) : null;
+      if (!result) {
+        lastError = new Error("Place not found.");
+        continue;
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Location service unavailable.");
     }
-    const data = await response.json();
-    const exits = Array.isArray(data.exits) && data.exits.length ? data.exits : buildFallbackExitsFromLocation(lat, lng);
-    return {
-      ...data,
-      buildings: (data.buildings || []).map((building) => ({ ...building, center: { lat: building.lat, lon: building.lng } })),
-      entrances: data.entrances || [],
-      exits,
-      safeAreas: data.safeAreas || [],
-    };
-  } catch {
-    return { buildings: [], entrances: [], exits: buildFallbackExitsFromLocation(lat, lng), safeAreas: [] };
   }
+
+  throw lastError;
+}
+
+function normalizeMapFeature(item, source) {
+  const lat = Number(item?.center?.lat ?? item?.lat ?? item?.geometry?.coordinates?.[1]);
+  const lng = Number(item?.center?.lon ?? item?.lon ?? item?.geometry?.coordinates?.[0]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  return {
+    id: item?.id || `${source}:${lat}:${lng}`,
+    name: item?.tags?.name || item?.name || "Unnamed feature",
+    lat,
+    lng,
+    center: { lat, lon: lng },
+    source,
+    tags: item?.tags || {},
+  };
+}
+
+export async function getNearbyFeatures(lat, lng) {
+  const fallbackResponse = { buildings: [], entrances: [], exits: buildFallbackExitsFromLocation(lat, lng), safeAreas: [] };
+  const featureSources = [
+    `/api/map/features?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
+    `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(`[out:json];(way(around:600,${lat},${lng})[building];node(around:600,${lat},${lng})[entrance];node(around:600,${lat},${lng})[barrier=gate];way(around:600,${lat},${lng})[leisure~"park|pitch"];way(around:2000,${lat},${lng})[amenity~"hospital|fire_station|police"];);out center;`)}`,
+  ];
+
+  for (const source of featureSources) {
+    try {
+      const response = await fetch(source, source.startsWith("http") ? { headers: { Accept: "application/json", "User-Agent": "EVACAI/1.0" } } : undefined);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const items = Array.isArray(data?.elements) ? data.elements : [];
+
+      const buildings = items
+        .filter((item) => item?.tags?.building)
+        .map((item) => normalizeMapFeature(item, "OVERPASS_MAP_DATA"))
+        .filter(Boolean);
+      const entrances = items
+        .filter((item) => item?.tags?.entrance || item?.tags?.barrier === "gate")
+        .map((item) => normalizeMapFeature(item, "OVERPASS_ENTRANCE_DATA"))
+        .filter(Boolean);
+      const safeAreas = items
+        .filter((item) => item?.tags?.leisure)
+        .map((item) => normalizeMapFeature(item, "OVERPASS_SAFE_AREA_DATA"))
+        .filter(Boolean);
+      const emergencyServices = items
+        .filter((item) => ["hospital", "fire_station", "police"].includes(item?.tags?.amenity))
+        .map((item) => ({ ...normalizeMapFeature(item, "OVERPASS_EMERGENCY_SERVICE"), type: item?.tags?.amenity }))
+        .filter(Boolean);
+
+      const exits = Array.isArray(data?.exits) && data.exits.length
+        ? data.exits
+        : buildFallbackExitsFromLocation(lat, lng);
+
+      return {
+        buildings,
+        entrances,
+        exits,
+        safeAreas,
+        emergencyServices,
+        notes: entrances.length ? [] : ["Entrance data unavailable. No verified OSM entrance or gate was returned."],
+      };
+    } catch {
+      continue;
+    }
+  }
+
+  return fallbackResponse;
 }
 
 export async function getRoadRoute(from, to) {
